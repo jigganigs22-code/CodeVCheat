@@ -24,21 +24,21 @@ jobs:
             -fvisibility=hidden \
             -fomit-frame-pointer \
             -dynamiclib \
-            -install_name @executable_path/libcheat.dylib \
+            -install_name @executable_path/libTDataMaster.dylib \
             -framework Foundation \
             -framework UIKit \
-            -o libcheat.dylib \
+            -o libTDataMaster.dylib \
             src/cheat.c
 
       - name: Verify binary
         run: |
-          file libcheat.dylib
-          lipo -info libcheat.dylib
-          otool -h libcheat.dylib
+          file libTDataMaster.dylib
+          lipo -info libTDataMaster.dylib
+          otool -h libTDataMaster.dylib
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libcheat
-          path: libcheat.dylib
+          name: libTDataMaster
+          path: libTDataMaster.dylib
           retention-days: 30
