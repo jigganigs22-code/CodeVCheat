@@ -234,75 +234,15 @@ static void patch_antitamper(void) {
 }
 
 // ============================================================================
-// FEATURE 10: ANTI-DETECTION — Hide from dyld module enumeration
+// FEATURE 10: ANTI-DETECTION — Passive disguise
 // ============================================================================
-// The anti-cheat (tersafe) enumerates loaded modules via _dyld_image_count()
-// and _dyld_get_image_name() to find suspicious libraries like "libcheat.dylib".
-// We hook all dyld image APIs to skip our entry, making us invisible.
-
-static uint32_t g_cheat_index = UINT32_MAX;
-static const char *g_cheat_name = NULL;
-
-// Original dyld functions
-static uint32_t (*orig_image_count)(void) = NULL;
-static const struct mach_header *(*orig_get_image_header)(uint32_t) = NULL;
-static const char *(*orig_get_image_name)(uint32_t) = NULL;
-static intptr_t (*orig_get_image_slide)(uint32_t) = NULL;
-
-static void find_our_image(void) {
-    uint32_t count = orig_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = orig_get_image_name(i);
-        if (name && strstr(name, "libTDataMaster")) {
-            g_cheat_index = i;
-            g_cheat_name = name;
-            printf("[cheat] Anti-Detection: found our image at index %u: %s\n", i, name);
-            return;
-        }
-    }
-    printf("[cheat] Anti-Detection: WARNING — could not find our image\n");
-}
-
-static uint32_t hooked_image_count(void) {
-    uint32_t count = orig_image_count();
-    if (g_cheat_index != UINT32_MAX) return count - 1;
-    return count;
-}
-
-static const struct mach_header *hooked_get_image_header(uint32_t index) {
-    if (g_cheat_index != UINT32_MAX && index >= g_cheat_index) index++;
-    return orig_get_image_header(index);
-}
-
-static const char *hooked_get_image_name(uint32_t index) {
-    if (g_cheat_index != UINT32_MAX && index >= g_cheat_index) index++;
-    return orig_get_image_name(index);
-}
-
-static intptr_t hooked_get_image_slide(uint32_t index) {
-    if (g_cheat_index != UINT32_MAX && index >= g_cheat_index) index++;
-    return orig_get_image_slide(index);
-}
+// The dylib is renamed to libTDataMaster.dylib at build time.
+// TDataMaster is already a Tencent library loaded by the game —
+// our copy sits at @executable_path while the real one is at @rpath/.
+// tersafe sees "TDataMaster" in the name and skips further inspection.
 
 static void patch_anti_detection(void) {
-    orig_image_count = _dyld_image_count;
-    orig_get_image_header = _dyld_get_image_header;
-    orig_get_image_name = _dyld_get_image_name;
-    orig_get_image_slide = _dyld_get_image_vmaddr_slide;
-
-    find_our_image();
-
-    void *count_addr = dlsym(RTLD_DEFAULT, "_dyld_image_count");
-    void *header_addr = dlsym(RTLD_DEFAULT, "_dyld_get_image_header");
-    void *name_addr = dlsym(RTLD_DEFAULT, "_dyld_get_image_name");
-    void *slide_addr = dlsym(RTLD_DEFAULT, "_dyld_get_image_vmaddr_slide");
-
-    if (count_addr) hook_install(count_addr, (void *)hooked_image_count, NULL, 0);
-    if (header_addr) hook_install(header_addr, (void *)hooked_get_image_header, NULL, 0);
-    if (name_addr) hook_install(name_addr, (void *)hooked_get_image_name, NULL, 0);
-    if (slide_addr) hook_install(slide_addr, (void *)hooked_get_image_slide, NULL, 0);
-
-    printf("[cheat] Anti-Detection: dyld enumeration hooks installed\n");
+    printf("[cheat] Anti-Detection: dylib disguised as libTDataMaster.dylib\n");
 }
 
 // ============================================================================
