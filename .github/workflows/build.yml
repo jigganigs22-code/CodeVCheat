@@ -1,0 +1,44 @@
+name: Build CodeV Cheat Dylib
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build dylib (arm64, iOS 14+)
+        run: |
+          xcrun -sdk iphoneos clang \
+            -arch arm64 \
+            -mios-version-min=14.0 \
+            -O2 -Wall -Wextra -Werror \
+            -fno-stack-protector \
+            -fvisibility=hidden \
+            -fomit-frame-pointer \
+            -dynamiclib \
+            -install_name @executable_path/libcheat.dylib \
+            -framework Foundation \
+            -framework UIKit \
+            -o libcheat.dylib \
+            src/cheat.c
+
+      - name: Verify binary
+        run: |
+          file libcheat.dylib
+          lipo -info libcheat.dylib
+          otool -h libcheat.dylib
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcheat
+          path: libcheat.dylib
+          retention-days: 30
