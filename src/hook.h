@@ -8,12 +8,12 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <dlfcn.h>
-#include <mach-o/ldsyms.h>
+#include <mach-o/dyld.h>
 
 // --- Helpers ---
 
 static inline uintptr_t get_image_base(void) {
-    return (uintptr_t)&_mh_execute_header;
+    return (uintptr_t)_dyld_get_image_header(0);
 }
 
 static long get_page_size(void) {
