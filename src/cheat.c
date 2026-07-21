@@ -255,8 +255,9 @@ static void cheat_init(void) {
     // Anti-detection MUST be installed IMMEDIATELY — before tersafe scans modules
     patch_anti_detection();
 
-    // Delay game hooks to let the game initialize
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+    // Delay game hooks — tersafe does integrity checks during Riot loading screen
+    // Install gameplay features AFTER the integrity check completes
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         printf("[cheat] Installing hooks...\n");
 

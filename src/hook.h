@@ -25,7 +25,16 @@ static long get_page_size(void) {
 static bool make_writable(void *addr, size_t size) {
     long ps = get_page_size();
     void *base = (void *)((uintptr_t)addr & ~(ps - 1));
-    return mprotect(base, size + ((uintptr_t)addr - (uintptr_t)base), PROT_READ | PROT_WRITE | PROT_EXEC) == 0;
+    size_t total = size + ((uintptr_t)addr - (uintptr_t)base);
+    if (mprotect(base, total, PROT_READ | PROT_WRITE) != 0) return false;
+    return true;
+}
+
+static void make_executable(void *addr, size_t size) {
+    long ps = get_page_size();
+    void *base = (void *)((uintptr_t)addr & ~(ps - 1));
+    size_t total = size + ((uintptr_t)addr - (uintptr_t)base);
+    mprotect(base, total, PROT_READ | PROT_EXEC);
 }
 
 // --- ARM64 instruction encoding ---
@@ -85,32 +94,34 @@ static bool hook_install(void *target, void *hook_fn, void **out_original, int s
     memcpy(e->orig, target, save_bytes);
 
     if (save_count > 0) {
-        // Allocate trampoline: saved instructions + B back
-        size_t tramp_size = save_bytes + 4; // +4 for the B back instruction
-        e->trampoline = mmap(NULL, tramp_size, PROT_READ | PROT_WRITE | PROT_EXEC,
+        size_t tramp_size = save_bytes + 4;
+        e->trampoline = mmap(NULL, tramp_size, PROT_READ | PROT_WRITE,
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (e->trampoline == MAP_FAILED) return false;
 
         memcpy(e->trampoline, e->orig, save_bytes);
         uint32_t *tramp = (uint32_t *)((char *)e->trampoline + save_bytes);
-        *tramp = arm64_b(tramp, (char *)target + save_bytes); // branch back past hook
+        *tramp = arm64_b(tramp, (char *)target + save_bytes);
+
+        make_executable(e->trampoline, tramp_size);
     } else {
         e->trampoline = NULL;
     }
 
-    // Make target writable
-    make_writable(target, save_bytes > 0 ? save_bytes : 4);
+    size_t patch_size = save_bytes > 0 ? save_bytes : 16;
+    if (!make_writable(target, patch_size)) return false;
 
-    // Write B hook_fn + NOPs
     uint32_t *tgt = (uint32_t *)target;
     tgt[0] = arm64_b(target, hook_fn);
     for (int i = 1; i < save_count || i < 4; i++) {
         if (i < save_count) {
-            tgt[i] = arm64_nop(); // NOP out the saved instructions (they're in trampoline)
+            tgt[i] = arm64_nop();
         } else if (i < 4) {
-            tgt[i] = arm64_nop(); // pad to at least 4 instructions (B + 3 NOPs)
+            tgt[i] = arm64_nop();
         }
     }
+
+    make_executable(target, patch_size);
 
     if (out_original) *out_original = e->trampoline;
     g_hook_count++;
@@ -120,6 +131,8 @@ static bool hook_install(void *target, void *hook_fn, void **out_original, int s
 // Simpler: directly patch N instructions at target address (no trampoline).
 // Used for complete replacements (return constant, etc.)
 static void patch_instructions(void *target, const uint32_t *insns, int count) {
-    make_writable(target, count * 4);
-    memcpy(target, insns, count * 4);
+    size_t sz = count * 4;
+    if (!make_writable(target, sz)) return;
+    memcpy(target, insns, sz);
+    make_executable(target, sz);
 }
